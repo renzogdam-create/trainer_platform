@@ -1,0 +1,299 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION & USER MANAGEMENT
+// ============================================================================
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  role      UserRole   @default(COACH)
+  teams     Team[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+enum UserRole {
+  COACH
+  ADMIN
+  ASSISTANT
+}
+
+// ============================================================================
+// TEAM & SQUAD MANAGEMENT
+// ============================================================================
+
+model Team {
+  id                    String                 @id @default(cuid())
+  userId                String
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  clubName              String?
+  ageGroup              String?
+  season                String
+  players               Player[]
+  annualTrainingPlans   AnnualTrainingPlan[]
+  drills                Drill[]
+  gameSheets            GameSheet[]
+  trainingConcepts      TrainingConcept[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================================================
+// PLAYER PROFILES
+// ============================================================================
+
+model Player {
+  id                      String                @id @default(cuid())
+  teamId                  String
+  team                    Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  firstName               String
+  lastName                String
+  dateOfBirth             DateTime?
+  position                String?
+  preferredFoot           String?               // LEFT, RIGHT, BOTH
+  shirtNumber             Int?
+  photoUrl                String?
+  notes                   String?
+
+  // Development profile (1-10 scale)
+  technicalRating         Int?                  @default(5)
+  tacticalRating          Int?                  @default(5)
+  physicalRating          Int?                  @default(5)
+  psychologicalRating     Int?                  @default(5)
+  socialRating            Int?                  @default(5)
+  strengths               String?
+  developmentAreas        String?
+  individualObjectives    String?
+
+  playerSelections        PlayerSelection[]
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  @@index([teamId])
+}
+
+// ============================================================================
+// TRAINING PLANNING HIERARCHY
+// ============================================================================
+
+model AnnualTrainingPlan {
+  id               String        @id @default(cuid())
+  teamId           String
+  team             Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  season           String        // e.g., "2024-2025"
+  title            String
+  description      String?
+  mainObjectives   String?       // JSON or text field with objectives
+  mesocycles       Mesocycle[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([teamId])
+}
+
+model Mesocycle {
+  id                    String        @id @default(cuid())
+  annualTrainingPlanId  String
+  annualTrainingPlan    AnnualTrainingPlan  @relation(fields: [annualTrainingPlanId], references: [id], onDelete: Cascade)
+  title                 String
+  order                 Int           // For drag-and-drop ordering
+  startDate             DateTime
+  endDate               DateTime
+  mainObjective         String?
+  cognitiveBlock        String?       // Creation & Occupation of Space, Movement of the Ball, etc.
+  notes                 String?
+  microcycles           Microcycle[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([annualTrainingPlanId])
+}
+
+model Microcycle {
+  id                    String              @id @default(cuid())
+  mesocycleId           String
+  mesocycle             Mesocycle           @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
+  title                 String
+  order                 Int                 // For drag-and-drop ordering
+  weekNumber            Int
+  startDate             DateTime
+  endDate               DateTime
+  objective             String?
+  cognitiveBlock        String?
+  coordinativeFocus     String?
+  tacticalFocus         String?
+  gameContext           String?
+  notes                 String?
+  trainingSessions      TrainingSession[]
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([mesocycleId])
+}
+
+model TrainingSession {
+  id                              String              @id @default(cuid())
+  microcycleId                    String
+  microcycle                      Microcycle          @relation(fields: [microcycleId], references: [id], onDelete: Cascade)
+  title                           String
+  sessionNumber                   Int
+  date                            DateTime
+  duration                        Int                 // in minutes
+  location                        String?
+  preference                      String?             // Coordinative, Cognitive, Game Contextual, Recovery, Match Preparation, Other
+  sessionObjective                String?
+  objectiveInPossession           String?
+  operationalFocusInPossession    String?
+  objectiveInRecovery             String?
+  operationalFocusInRecovery      String?
+  coachNotes                      String?
+  sessionBlocks                   SessionBlock[]
+  playerSelections                PlayerSelection[]
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @updatedAt
+
+  @@index([microcycleId])
+}
+
+model SessionBlock {
+  id                  String            @id @default(cuid())
+  trainingSessionId   String
+  trainingSession     TrainingSession   @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+  order               Int               // For drag-and-drop ordering
+  title               String            // e.g., "00 Warm-up", "01 Initiation", "02 Main Stage", "03 Implementation / SSG"
+  duration            Int?              // in minutes
+  pssType             String?           // Possession Small-Sided Game type
+  drillId             String?
+  drill               Drill?            @relation(fields: [drillId], references: [id], onDelete: SetNull)
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([trainingSessionId])
+  @@index([drillId])
+}
+
+// ============================================================================
+// DRILL DATABASE
+// ============================================================================
+
+model Drill {
+  id                          String        @id @default(cuid())
+  teamId                      String
+  team                        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  title                       String
+  type                        String        // Rondo, Possession Game, Positional Game, Progression Game, Finishing, etc.
+  ageGroup                    String?
+  duration                    Int?          // in minutes
+  load                        String?       // Intensity level
+  restBetweenRounds           Int?          // in seconds
+  minPlayers                  Int?
+  recommendedPlayers          Int?
+  footballVariant             String?       // 11v11, 7v7, 5v5, etc.
+  difficulty                  String?       // Beginner, Intermediate, Advanced
+  area                        String?       // Field area size (m x m)
+  materialNeeded              String?
+  generalObjective            String?
+  organization                String?
+  description                 String?
+  drillFlow                   String?
+  rulesAndConstraints         String?
+  coachingFocusInPossession   String?
+  coachingFocusInRecovery     String?
+  scoringSystem               String?
+  progressions                String?
+  keyTransferToGame           String?
+  graphicUrl                  String?
+  tags                        String?       // JSON array or comma-separated
+  sessionBlocks               SessionBlock[]
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+
+  @@index([teamId])
+}
+
+// ============================================================================
+// MATCH MANAGEMENT
+// ============================================================================
+
+model GameSheet {
+  id                      String        @id @default(cuid())
+  teamId                  String
+  team                    Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  opponent                String
+  date                    DateTime
+  competition             String?
+  venue                   String?
+  formation               String?
+  gameModel               String?
+  startingLineup          String?       // JSON array of player IDs
+  substitutes             String?       // JSON array of player IDs
+  tacticalObjectives      String?
+  inPossessionPlan        String?
+  outOfPossessionPlan     String?
+  transitionAttackPlan    String?
+  transitionDefensePlan   String?
+  setPieces               String?
+  playerMinutes           String?       // JSON object with player minutes
+  matchNotes              String?
+  postMatchReflection     String?
+  score                   String?       // e.g., "2-1"
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([teamId])
+}
+
+// ============================================================================
+// PLAYER SELECTION & GROUPING
+// ============================================================================
+
+model PlayerSelection {
+  id                  String            @id @default(cuid())
+  trainingSessionId   String?
+  trainingSession     TrainingSession?  @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
+  drillId             String?
+  playerId            String
+  player              Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  groupName           String?           // "Team A", "Team B", "Jokers", "Defenders", etc.
+  positionInGrid      String?           // "GK", "CB", "LB", "RB", etc.
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([trainingSessionId])
+  @@index([playerId])
+}
+
+// ============================================================================
+// TRAINING CONCEPTS & METHODOLOGY LIBRARY
+// ============================================================================
+
+model TrainingConcept {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  block     String   // "Creation & Occupation of Space", "Movement of the Ball", etc.
+  title     String
+  content   String?  // Rich text content
+  order     Int      @default(0)
+  tags      String?  // JSON array
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
